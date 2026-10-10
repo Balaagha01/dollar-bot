@@ -6,6 +6,9 @@ from bs4 import BeautifulSoup
 BOT_TOKEN = "8887386327:AAEArJPxnYVpYIQjMMJlt--JWkRu3u1unVQ"
 CHANNEL_ID = "@krddollar"
 
+# لینکی گیفی دۆلارە بێ باکگراوندەکە (Transparent 3D Sticker)
+GIF_URL = "https://media.giphy.com/media/UodgXAKvKK887zN7xH/giphy.gif"
+
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
     "Cache-Control": "no-cache",
@@ -47,21 +50,23 @@ def send_dollar_update(new_price, old_price=None):
             elif new_price < old_price:
                 status_line = f"\n📉 **دابەزین (-{diff:,} دینار)**"
 
-        message = (
+        caption = (
             "💵 **نرخی دۆلار لە بازاڕی هەولێر**\n\n"
             f"🔹 **100 دۆلار = {new_price:,} دینار**{status_line}\n\n"
             "📍 @krddollar"
         )
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendAnimation"
         payload = {
             "chat_id": CHANNEL_ID,
-            "text": message,
+            "animation": GIF_URL,
+            "caption": caption,
             "parse_mode": "Markdown"
         }
-        r = requests.post(url, data=payload, timeout=10)
-        print(f"پۆست کرا: {new_price} | وەڵام: {r.status_code}", flush=True)
+        r = requests.post(url, data=payload, timeout=15)
+        print(f"پۆست کرا بە گیف: {new_price} | وەڵام: {r.status_code}", flush=True)
     except Exception as e:
-        print(f"هەڵە لە ناردنی نامە: {e}", flush=True)
+        print(f"هەڵە لە ناردنی گیف: {e}", flush=True)
 
 if __name__ == "__main__":
     print("پشکنینی نرخ دەستی پێکرد...", flush=True)
@@ -74,7 +79,7 @@ if __name__ == "__main__":
     
     if current_market_price:
         if current_market_price != last_posted_price:
-            print("نرخ گۆڕاوە، خەریکە پۆست دەکرێت...", flush=True)
+            print("نرخ گۆڕاوە، خەریکە پۆست دەکرێت بە گیف...", flush=True)
             send_dollar_update(current_market_price, last_posted_price)
         else:
             print("نرخ وەک خۆیەتی و نەگۆڕاوە. پۆست ناکرێت بۆ ئەوەی دووبارە نەبێتەوە.", flush=True)
