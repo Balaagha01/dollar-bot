@@ -10,14 +10,12 @@ from bs4 import BeautifulSoup
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8887386327:AAEArJPxnYVpYIQjMMJlt--JWkRu3u1unVQ")
 CHANNEL_ID = "@krddollar"
 
-# سەرچاوەکانی وەرگرتنی نرخ
 SOURCE_CHANNELS = ["bazari_dolaraka", "dolar_hawler", "hawler_dolar"]
 
-# فایلەکانی وێنە
 IMAGE_UP = "up.jpg"
 IMAGE_DOWN = "down.jpg"
-IMAGE_CLOSE = "close.jpg" # وێنەی تایبەتی داخران
-FLASH_ALERT_LIMIT = 1000  # بڕی گۆڕانکاری بۆ ئاگاداری بەپەلە
+IMAGE_CLOSE = "close.jpg"
+FLASH_ALERT_LIMIT = 1000
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -42,24 +40,48 @@ def get_channel_messages(channel_username):
         print(f"هەڵە لە وەرگرتنی کەناڵی {channel_username}: {e}", flush=True)
     return []
 
-def extract_prices_from_texts(messages):
-    prices = []
-    for msg in messages:
-        matches = re.findall(r'(\d{2,3}[,.]?\d{3})', msg)
-        for m in matches:
-            clean = int(m.replace(",", "").replace(".", ""))
-            if 140000 <= clean <= 190000:
-                prices.append(clean)
-    return prices
+def extract_market_rates(messages):
+    """دەرهێنانی نرخی دۆلار، زێڕی عەیار ٢١ و زێو لە پەیامەکان"""
+    usd_price = None
+    gold_21_price = None
+    silver_price = None
 
-def fetch_market_price():
+    for msg in reversed(messages):
+        # ١. پشکنینی نرخی دۆلار
+        if not usd_price:
+            matches = re.findall(r'(\d{2,3}[,.]?\d{3})', msg)
+            for m in matches:
+                clean = int(m.replace(",", "").replace(".", ""))
+                if 140000 <= clean <= 190000:
+                    usd_price = clean
+                    break
+
+        # ٢. پشکنینی نرخی زێڕی عەیار ٢١ (نێوان 400 هەزار تا 800 هەزار)
+        if not gold_21_price:
+            gold_match = re.search(r'(?:عیار|عەیار|عەیاری|عیاری)\s*21[^\d]*(\d{2,3}[,.]?\d{3})', msg)
+            if gold_match:
+                clean_gold = int(gold_match.group(1).replace(",", "").replace(".", ""))
+                if 400000 <= clean_gold <= 850000:
+                    gold_21_price = clean_gold
+
+        # ٣. پشکنینی نرخی زێو (نێوان 4 هەزار تا 50 هەزار)
+        if not silver_price:
+            silver_match = re.search(r'(?:زێو|زیو)[^\d]*(\d{1,2}[,.]?\d{3})', msg)
+            if silver_match:
+                clean_silver = int(silver_match.group(1).replace(",", "").replace(".", ""))
+                if 4000 <= clean_silver <= 50000:
+                    silver_price = clean_silver
+
+    return usd_price, gold_21_price, silver_price
+
+def fetch_all_prices():
     for ch in SOURCE_CHANNELS:
         msgs = get_channel_messages(ch)
-        prices = extract_prices_from_texts(msgs)
-        if prices:
-            print(f"نرخ لە [{ch}] دۆزرایەوە: {prices[-1]}", flush=True)
-            return prices[-1]
-    return None
+        usd, gold, silver = extract_market_rates(msgs)
+        if usd:
+            print(f"نرخەکان لە [{ch}] وەرگیران: دۆلار={usd}, زێڕ={gold}, زێو={silver}", flush=True)
+            return usd, gold, silver
+    return None, None, None
 
 def add_reaction(message_id, emoji):
     try:
@@ -73,7 +95,7 @@ def add_reaction(message_id, emoji):
     except Exception as e:
         print(f"هەڵە لە ئیمۆجی: {e}", flush=True)
 
-def send_dollar_update(new_price, old_price=None):
+def send_dollar_update(new_price, old_price=None, gold_price=None, silver_price=None):
     try:
         status_line = ""
         alert_badge = ""
@@ -94,13 +116,20 @@ def send_dollar_update(new_price, old_price=None):
                 selected_image = IMAGE_DOWN
                 reaction_emoji = "👎"
 
+        # دێڕی زێڕ و زێو ئەگەر دۆزرابنەوە
+        extra_rates = ""
+        if gold_price:
+            extra_rates += f"\n👑 **1 مسقاڵ زێڕ (عەیار 21): {gold_price:,} دینار**"
+        if silver_price:
+            extra_rates += f"\n⚪️ **1 مسقاڵ زێو: {silver_price:,} دینار**"
+
         caption = (
-            "💵 **نرخی دۆلار لە بازاڕی هەولێر**\n\n"
-            f"🔹 **100 دۆلار = {new_price:,} دینار**{status_line}{alert_badge}\n\n"
+            "💵 **نرخی بازاڕ لە هەولێر**\n\n"
+            f"🔹 **100 دۆلار = {new_price:,} دینار**{status_line}{extra_rates}{alert_badge}\n\n"
             "📍 @krddollar"
         )
 
-        share_msg = urllib.parse.quote("📊 نوێترین نرخی دۆلار لە بازاڕی هەولێر 💵")
+        share_msg = urllib.parse.quote("📊 نوێترین نرخی دۆلار و زێڕ لە بازاڕی هەولێر 💵")
         buttons = {
             "inline_keyboard": [
                 [
@@ -135,36 +164,47 @@ def send_dollar_update(new_price, old_price=None):
             msg_id = r.json().get("result", {}).get("message_id")
             if msg_id:
                 add_reaction(msg_id, reaction_emoji)
+        print(f"پۆستی نوێکراوە نێردرا: دۆلار={new_price}", flush=True)
     except Exception as e:
-        print(f"کێشە لە پۆستی گۆڕانکاری: {e}", flush=True)
+        print(f"هەڵە لە پۆست: {e}", flush=True)
 
-def handle_daily_market_close(my_channel_messages, current_price):
-    """ناردنی کورتەی داخرانی ئێواران لەگەڵ وێنە"""
+def handle_daily_market_close(my_channel_messages, current_price, gold_price=None, silver_price=None):
     try:
-        # پشکنین بۆ ئەوەی ڕۆژانە تەنها یەکجار بنێردرێت
         for msg in my_channel_messages[-5:]:
             if "داخرانی بازاڕ" in msg:
-                print("پۆستی داخران ئەمڕۆ پێشتر کراوە.", flush=True)
+                print("پۆستی داخران پێشتر کراوە.", flush=True)
                 return
 
-        all_today_prices = extract_prices_from_texts(my_channel_messages)
-        if not all_today_prices:
-            all_today_prices = [current_price]
-        else:
-            all_today_prices.append(current_price)
+        usd_prices = []
+        for msg in my_channel_messages:
+            matches = re.findall(r'(\d{2,3}[,.]?\d{3})', msg)
+            for m in matches:
+                clean = int(m.replace(",", "").replace(".", ""))
+                if 140000 <= clean <= 190000:
+                    usd_prices.append(clean)
 
-        high_p = max(all_today_prices)
-        low_p = min(all_today_prices)
+        if not usd_prices:
+            usd_prices = [current_price]
+        else:
+            usd_prices.append(current_price)
+
+        high_p = max(usd_prices)
+        low_p = min(usd_prices)
 
         close_caption = (
-            "🔒 **داخرانی بازاڕی دۆلار لە هەولێر**\n\n"
-            f"🔹 **نرخی کۆتایی: {current_price:,} دینار**\n"
-            f"🔺 **بەرزترین نرخ: {high_p:,} دینار**\n"
-            f"🔻 **نزمترین نرخ: {low_p:,} دینار**\n\n"
-            "📍 @krddollar"
+            "🔒 **داخرانی بازاڕ لە هەولێر**\n\n"
+            f"🔹 **دۆلار: {current_price:,} دینار**\n"
+            f"🔺 **بەرزترین: {high_p:,} دینار**\n"
+            f"🔻 **نزمترین: {low_p:,} دینار**"
         )
+        if gold_price:
+            close_caption += f"\n👑 **زێڕ (عەیار 21): {gold_price:,} دینار**"
+        if silver_price:
+            close_caption += f"\n⚪️ **زێو: {silver_price:,} دینار**"
 
-        share_msg = urllib.parse.quote("🔒 پوختەی داخرانی بازاڕی دۆلار لە هەولێر 💵")
+        close_caption += "\n\n📍 @krddollar"
+
+        share_msg = urllib.parse.quote("🔒 پوختەی داخرانی بازاڕ لە هەولێر 💵")
         buttons = {
             "inline_keyboard": [
                 [
@@ -174,7 +214,6 @@ def handle_daily_market_close(my_channel_messages, current_price):
             ]
         }
 
-        # ناردنی وێنەی close.jpg ئەگەر هەبێت، ئەگەر نەبوو وەک دەق دەینێرێت
         if os.path.exists(IMAGE_CLOSE):
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
             with open(IMAGE_CLOSE, "rb") as f:
@@ -198,31 +237,39 @@ def handle_daily_market_close(my_channel_messages, current_price):
         if r and r.status_code == 200:
             msg_id = r.json().get("result", {}).get("message_id")
             if msg_id:
-                add_reaction(msg_id, "🔒") # ئیمۆجی قفڵ لە کاتی داخران
-        print("پۆستی داخران بە سەرکەوتوویی کرا.", flush=True)
+                add_reaction(msg_id, "🔒")
+        print("پۆستی داخران نێردرا.", flush=True)
     except Exception as e:
         print(f"هەڵە لە پۆستی داخران: {e}", flush=True)
 
 if __name__ == "__main__":
-    print("سیستمی زیرەک دەستی پێکرد...", flush=True)
+    print("پشکنینی بازاڕ بەردەوامە...", flush=True)
     kurd_time = datetime.now(timezone(timedelta(hours=3)))
     current_hour = kurd_time.hour
     current_minute = kurd_time.minute
-    print(f"کاتی کوردستان: {kurd_time.strftime('%I:%M %p')}", flush=True)
 
-    current_price = fetch_market_price()
+    usd_price, gold_price, silver_price = fetch_all_prices()
     my_msgs = get_channel_messages(CHANNEL_ID)
-    my_prices = extract_prices_from_texts(my_msgs)
-    last_posted_price = my_prices[-1] if my_prices else None
 
-    # ١. پشکنینی پۆستی ئاسایی
-    if current_price and current_price != last_posted_price:
-        send_dollar_update(current_price, last_posted_price)
+    last_usd = None
+    for msg in reversed(my_msgs):
+        matches = re.findall(r'(\d{2,3}[,.]?\d{3})', msg)
+        for m in matches:
+            clean = int(m.replace(",", "").replace(".", ""))
+            if 140000 <= clean <= 190000:
+                last_usd = clean
+                break
+        if last_usd:
+            break
 
-    # ٢. پۆستی داخرانی ئێواران (نێوان 06:50ی ئێوارە تا 07:20)
+    # ١. پۆستکردنی گۆڕانکاری
+    if usd_price and usd_price != last_usd:
+        send_dollar_update(usd_price, last_usd, gold_price, silver_price)
+
+    # ٢. کاتی داخرانی ئێواران
     if (current_hour == 18 and current_minute >= 50) or (current_hour == 19 and current_minute <= 20):
-        if current_price:
-            handle_daily_market_close(my_msgs, current_price)
+        if usd_price:
+            handle_daily_market_close(my_msgs, usd_price, gold_price, silver_price)
 
     # ٢. پشکنینی کاتی داخرانی بازاڕ (نێوان 06:50 تا 07:20ی ئێوارە)
     if (current_hour == 18 and current_minute >= 50) or (current_hour == 19 and current_minute <= 20):
