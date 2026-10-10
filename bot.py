@@ -2,6 +2,7 @@ import time
 import requests
 import re
 import os
+import json
 from bs4 import BeautifulSoup
 
 BOT_TOKEN = "8887386327:AAEArJPxnYVpYIQjMMJlt--JWkRu3u1unVQ"
@@ -42,7 +43,7 @@ def get_latest_price_from_channel(channel_username):
     return None
 
 def add_reaction(message_id, emoji):
-    """دانانی کاردانەوە (ئیمۆجی) لەسەر پۆستەکە"""
+    """دانانی ئیمۆجی (Reaction) لەسەر پۆستەکە"""
     try:
         react_url = f"https://api.telegram.org/bot{BOT_TOKEN}/setMessageReaction"
         payload = {
@@ -52,17 +53,17 @@ def add_reaction(message_id, emoji):
         }
         res = requests.post(react_url, json=payload, timeout=10)
         if res.status_code == 200:
-            print(f"ئیمۆجیی {emoji} لەسەر پۆستەکە دانرا.", flush=True)
+            print(f"ئیمۆجیی {emoji} دانرا.", flush=True)
         else:
             print(f"نەتوانرا ئیمۆجی دابنرێت: {res.text}", flush=True)
     except Exception as e:
-        print(f"هەڵە لە دانانی ئیمۆجی: {e}", flush=True)
+        print(f"هەڵە لە کاردانەوەی ئیمۆجی: {e}", flush=True)
 
 def send_dollar_update(new_price, old_price=None):
     try:
         status_line = ""
         selected_image = IMAGE_UP
-        reaction_emoji = "👍"  # بنەڕەتی
+        reaction_emoji = "👍"
 
         if old_price:
             diff = abs(new_price - old_price)
@@ -81,6 +82,17 @@ def send_dollar_update(new_price, old_price=None):
             "📍 @krddollar"
         )
 
+        # دیزاینی دوگمە شەفافەکان (Inline Keyboard)
+        share_text = "نوێترین%20نرخی%20دۆلار%20لە%20بازاڕی%20هەولێر"
+        buttons = {
+            "inline_keyboard": [
+                [
+                    {"text": "📢 جۆینکردنی کەناڵ", "url": "https://t.me/krddollar"},
+                    {"text": "🔄 ناردن بۆ هاوڕێیان", "url": f"https://t.me/share/url?url=https://t.me/krddollar&text={share_text}"}
+                ]
+            ]
+        }
+
         r = None
         if os.path.exists(selected_image):
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
@@ -88,17 +100,24 @@ def send_dollar_update(new_price, old_price=None):
                 payload = {
                     "chat_id": CHANNEL_ID,
                     "caption": caption,
-                    "parse_mode": "Markdown"
+                    "parse_mode": "Markdown",
+                    "reply_markup": json.dumps(buttons)
                 }
                 files = {"photo": f}
                 r = requests.post(url, data=payload, files=files, timeout=20)
         else:
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-            r = requests.post(url, data={"chat_id": CHANNEL_ID, "text": caption, "parse_mode": "Markdown"}, timeout=10)
+            payload = {
+                "chat_id": CHANNEL_ID,
+                "text": caption,
+                "parse_mode": "Markdown",
+                "reply_markup": json.dumps(buttons)
+            }
+            r = requests.post(url, data=payload, timeout=10)
 
         print(f"پۆست کرا: {new_price} | وەڵام: {r.status_code}", flush=True)
 
-        # وەرگرتنی ئایدی پەیامەکە و دانانی کاردانەوە
+        # ئەگەر پۆستەکە سەرکەوتوو بوو، ئیمۆجی دادەنێت
         if r and r.status_code == 200:
             msg_data = r.json()
             message_id = msg_data.get("result", {}).get("message_id")
@@ -114,14 +133,14 @@ if __name__ == "__main__":
     current_market_price = get_latest_price_from_channel("bazari_dolaraka")
     last_posted_price = get_latest_price_from_channel(CHANNEL_ID)
     
-    print(f"نرخی ئێستای بازاڕ: {current_market_price}", flush=True)
-    print(f"کۆتا نرخی کەناڵەکەت: {last_posted_price}", flush=True)
+    print(f"نرخی بازاڕ: {current_market_price}", flush=True)
+    print(f"کۆتا نرخی کەناڵ: {last_posted_price}", flush=True)
     
     if current_market_price:
         if current_market_price != last_posted_price:
-            print("نرخ گۆڕاوە، خەریکە پۆست دەکرێت...", flush=True)
+            print("نرخ گۆڕاوە، پۆست دەکرێت...", flush=True)
             send_dollar_update(current_market_price, last_posted_price)
         else:
-            print("نرخ وەک خۆیەتی و نەگۆڕاوە. پۆست ناکرێت.", flush=True)
+            print("نرخ وەک خۆیەتی و نەگۆڕاوە.", flush=True)
     else:
-        print("هیچ نرخێک لە بازاڕ نەدۆزرایەوە.", flush=True)
+        print("هیچ نرخێک نەدۆزرایەوە.", flush=True)
