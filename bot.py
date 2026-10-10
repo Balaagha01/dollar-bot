@@ -26,8 +26,10 @@ HEADERS = {
 
 def convert_digits(text):
     kurdish_digits = "٠١٢٣٤٥٦٧٨٩"
+    persian_digits = "۰۱۲۳۴۵۶۷۸۹"
     english_digits = "0123456789"
-    return text.translate(str.maketrans(kurdish_digits, english_digits))
+    text = text.translate(str.maketrans(kurdish_digits, english_digits))
+    return text.translate(str.maketrans(persian_digits, english_digits))
 
 def get_channel_messages(channel_username):
     try:
@@ -38,7 +40,7 @@ def get_channel_messages(channel_username):
             soup = BeautifulSoup(res.text, "html.parser")
             return [convert_digits(m.get_text()) for m in soup.find_all("div", class_="tgme_widget_message_text")]
     except Exception as e:
-        print(f"هەڵە لە وەرگرتنی کەناڵی {channel_username}: {e}", flush=True)
+        print(f"هەڵە لە کەناڵی {channel_username}: {e}", flush=True)
     return []
 
 def extract_market_rates(messages):
@@ -47,6 +49,7 @@ def extract_market_rates(messages):
     silver_price = None
 
     for msg in reversed(messages):
+        # ١. دەرهێنانی نرخی دۆلار
         if not usd_price:
             matches = re.findall(r'(\d{2,3}[,.]?\d{3})', msg)
             for m in matches:
@@ -55,29 +58,56 @@ def extract_market_rates(messages):
                     usd_price = clean
                     break
 
+        # ٢. دەرهێنانی نرخی زێڕی عەیار ٢١ (بە هەردوو شێوازی 590,000 یان 590 هەزار)
         if not gold_21_price:
-            gold_match = re.search(r'(?:عیار|عەیار|عەیاری|عیاری)\s*21[^\d]*(\d{2,3}[,.]?\d{3})', msg)
-            if gold_match:
-                clean_gold = int(gold_match.group(1).replace(",", "").replace(".", ""))
-                if 400000 <= clean_gold <= 850000:
-                    gold_21_price = clean_gold
+            # شێوازی یەکەم: بە ژمارەی تەواو
+            g_match = re.search(r'(?:عیار|عەیار|عەیاری|عیاری|زێڕ|زێر)\s*21[^\d]*(\d{2,3}[,.]?\d{3})', msg)
+            if g_match:
+                clean_g = int(g_match.group(1).replace(",", "").replace(".", ""))
+                if 400000 <= clean_g <= 850000:
+                    gold_21_price = clean_g
+            else:
+                # شێوازی دووەم: کاتێک بە وشەی "هەزار" دەنووسرێت (وەک 590 هەزار)
+                g_hazar = re.search(r'(?:عیار|عەیار|عەیاری|عیاری|زێڕ|زێر)\s*21[^\d]*(\d{3})\s*هەزار', msg)
+                if g_hazar:
+                    clean_g = int(g_hazar.group(1)) * 1000
+                    if 400000 <= clean_g <= 850000:
+                        gold_21_price = clean_g
 
+        # ٣. دەرهێنانی نرخی زێو
         if not silver_price:
-            silver_match = re.search(r'(?:زێو|زیو)[^\d]*(\d{1,2}[,.]?\d{3})', msg)
-            if silver_match:
-                clean_silver = int(silver_match.group(1).replace(",", "").replace(".", ""))
-                if 4000 <= clean_silver <= 50000:
-                    silver_price = clean_silver
+            s_match = re.search(r'(?:زێو|زیو)[^\d]*(\d{1,2}[,.]?\d{3})', msg)
+            if s_match:
+                clean_s = int(s_match.group(1).replace(",", "").replace(".", ""))
+                if 4000 <= clean_s <= 50000:
+                    silver_price = clean_s
+            else:
+                s_hazar = re.search(r'(?:زێو|زیو)[^\d]*(\d{1,2})\s*هەزار', msg)
+                if s_hazar:
+                    clean_s = int(s_hazar.group(1)) * 1000
+                    if 4000 <= clean_s <= 50000:
+                        silver_price = clean_s
 
     return usd_price, gold_21_price, silver_price
 
 def fetch_all_prices():
+    """پشکنینی هەموو کەناڵەکان بەدوای دۆلار، زێڕ و زێو"""
+    best_usd = None
+    best_gold = None
+    best_silver = None
+
     for ch in SOURCE_CHANNELS:
         msgs = get_channel_messages(ch)
-        usd, gold, silver = extract_market_rates(msgs)
-        if usd:
-            return usd, gold, silver
-    return None, None, None
+        u, g, s = extract_market_rates(msgs)
+        if not best_usd and u:
+            best_usd = u
+        if not best_gold and g:
+            best_gold = g
+        if not best_silver and s:
+            best_silver = s
+
+    print(f"ئەنجامی پشکنین: دۆلار={best_usd}, زێڕ={best_gold}, زێو={best_silver}", flush=True)
+    return best_usd, best_gold, best_silver
 
 def add_reaction(message_id, emoji):
     try:
@@ -89,7 +119,7 @@ def add_reaction(message_id, emoji):
         }
         requests.post(url, json=payload, timeout=10)
     except Exception as e:
-        print(f"هەڵە لە ئیمۆجی: {e}", flush=True)
+        print(f"هەڵە لە کاردانەوە: {e}", flush=True)
 
 def send_dollar_update(new_price, old_price=None, gold_price=None, silver_price=None):
     try:
@@ -152,7 +182,6 @@ def send_dollar_update(new_price, old_price=None, gold_price=None, silver_price=
 
 def handle_daily_market_close(my_channel_messages, current_price, gold_price=None, silver_price=None):
     try:
-        # ئەگەر پێشتر پۆستی داخران کرابێت، دووبارەی ناکاتەوە
         for msg in my_channel_messages[-8:]:
             if "داخرانی بازاڕ" in msg:
                 print("پۆستی داخران پێشتر ئەمڕۆ کراوە.", flush=True)
@@ -209,9 +238,9 @@ def handle_daily_market_close(my_channel_messages, current_price, gold_price=Non
             msg_id = r.json().get("result", {}).get("message_id")
             if msg_id:
                 add_reaction(msg_id, "🔒")
-        print("پۆستی داخران بە سەرکەوتوویی نێردرا.", flush=True)
+        print("پۆستی داخران نێردرا.", flush=True)
     except Exception as e:
-        print(f"هەڵە لە داخران: {e}", flush=True)
+        print(f"هەڵە لە پۆستی داخران: {e}", flush=True)
 
 if __name__ == "__main__":
     kurd_time = datetime.now(timezone(timedelta(hours=3)))
@@ -235,9 +264,7 @@ if __name__ == "__main__":
     if usd_price:
         is_closing_time = (current_hour == 18 and current_minute >= 50) or (current_hour == 19 and current_minute <= 20)
 
-        # لە کاتی داخراندا تەنها پۆستی داخران دەکات
         if is_closing_time:
             handle_daily_market_close(my_msgs, usd_price, gold_price, silver_price)
-        # لە کاتەکانی تردا تەنها ئەگەر نرخ گۆڕابێت پۆستی ئاسایی دەکات
         elif usd_price != last_usd:
             send_dollar_update(usd_price, last_usd, gold_price, silver_price)
