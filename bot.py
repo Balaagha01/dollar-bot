@@ -12,7 +12,6 @@ CHANNEL_ID = "@krddollar"
 
 SOURCE_CHANNELS = ["bazari_dolaraka", "dolar_hawler", "hawler_dolar"]
 
-# فایلەکانی وێنە
 IMAGE_UP = "up.jpg"
 IMAGE_DOWN = "down.jpg"
 IMAGE_CLOSE = "close.jpg"
@@ -138,35 +137,25 @@ def send_dollar_update(new_price, old_price=None, gold_price=None, silver_price=
         if os.path.exists(selected_image):
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
             with open(selected_image, "rb") as f:
-                payload = {
-                    "chat_id": CHANNEL_ID,
-                    "caption": caption,
-                    "parse_mode": "Markdown",
-                    "reply_markup": json.dumps(buttons)
-                }
-                r = requests.post(url, data=payload, files={"photo": f}, timeout=20)
+                r = requests.post(url, data={"chat_id": CHANNEL_ID, "caption": caption, "parse_mode": "Markdown", "reply_markup": json.dumps(buttons)}, files={"photo": f}, timeout=20)
         else:
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-            payload = {
-                "chat_id": CHANNEL_ID,
-                "text": caption,
-                "parse_mode": "Markdown",
-                "reply_markup": json.dumps(buttons)
-            }
-            r = requests.post(url, data=payload, timeout=10)
+            r = requests.post(url, data={"chat_id": CHANNEL_ID, "text": caption, "parse_mode": "Markdown", "reply_markup": json.dumps(buttons)}, timeout=10)
 
         if r and r.status_code == 200:
             msg_id = r.json().get("result", {}).get("message_id")
             if msg_id:
                 add_reaction(msg_id, reaction_emoji)
+        print("پۆستی ئاسایی نێردرا.", flush=True)
     except Exception as e:
-        print(f"کێشە لە پۆست: {e}", flush=True)
+        print(f"هەڵە لە پۆست: {e}", flush=True)
 
 def handle_daily_market_close(my_channel_messages, current_price, gold_price=None, silver_price=None):
     try:
-        for msg in my_channel_messages[-5:]:
+        # ئەگەر پێشتر پۆستی داخران کرابێت، دووبارەی ناکاتەوە
+        for msg in my_channel_messages[-8:]:
             if "داخرانی بازاڕ" in msg:
-                print("پۆستی داخران پێشتر کراوە.", flush=True)
+                print("پۆستی داخران پێشتر ئەمڕۆ کراوە.", flush=True)
                 return
 
         usd_prices = []
@@ -220,7 +209,7 @@ def handle_daily_market_close(my_channel_messages, current_price, gold_price=Non
             msg_id = r.json().get("result", {}).get("message_id")
             if msg_id:
                 add_reaction(msg_id, "🔒")
-        print("پۆستی داخران نێردرا.", flush=True)
+        print("پۆستی داخران بە سەرکەوتوویی نێردرا.", flush=True)
     except Exception as e:
         print(f"هەڵە لە داخران: {e}", flush=True)
 
@@ -244,14 +233,11 @@ if __name__ == "__main__":
             break
 
     if usd_price:
-        # ١. پۆستی ئاسایی لە کاتی گۆڕانی نرخ
-        if usd_price != last_usd:
+        is_closing_time = (current_hour == 18 and current_minute >= 50) or (current_hour == 19 and current_minute <= 20)
+
+        # لە کاتی داخراندا تەنها پۆستی داخران دەکات
+        if is_closing_time:
+            handle_daily_market_close(my_msgs, usd_price, gold_price, silver_price)
+        # لە کاتەکانی تردا تەنها ئەگەر نرخ گۆڕابێت پۆستی ئاسایی دەکات
+        elif usd_price != last_usd:
             send_dollar_update(usd_price, last_usd, gold_price, silver_price)
-
-        # ٢. کورتەی داخرانی ئێواران (نێوان 06:50 تا 07:20)
-        if (current_hour == 18 and current_minute >= 50) or (current_hour == 19 and current_minute <= 20):
-            handle_daily_market_close(my_msgs, usd_price, gold_price, silver_price)
-
-        # ٣. کورتەی داخرانی ئێواران (نێوان 06:50 تا 07:20)
-        if (current_hour == 18 and current_minute >= 50) or (current_hour == 19 and current_minute <= 20):
-            handle_daily_market_close(my_msgs, usd_price, gold_price, silver_price)
