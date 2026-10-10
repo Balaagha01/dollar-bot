@@ -48,7 +48,10 @@ def extract_market_rates(messages):
     gold_21_price = None
     silver_price = None
 
-    for msg in reversed(messages):
+    # تەنها لە ١٢ پەیامی کۆتایی بگەڕێ تا نرخی ڕۆژانی پێشوو نەهێنێت
+    recent_messages = list(reversed(messages))[:12]
+
+    for msg in recent_messages:
         # ١. دەرهێنانی نرخی دۆلار
         if not usd_price:
             matches = re.findall(r'(\d{2,3}[,.]?\d{3})', msg)
@@ -58,16 +61,14 @@ def extract_market_rates(messages):
                     usd_price = clean
                     break
 
-        # ٢. دەرهێنانی نرخی زێڕی عەیار ٢١ (بە هەردوو شێوازی 590,000 یان 590 هەزار)
+        # ٢. دەرهێنانی نرخی زێڕی عەیار ٢١
         if not gold_21_price:
-            # شێوازی یەکەم: بە ژمارەی تەواو
             g_match = re.search(r'(?:عیار|عەیار|عەیاری|عیاری|زێڕ|زێر)\s*21[^\d]*(\d{2,3}[,.]?\d{3})', msg)
             if g_match:
                 clean_g = int(g_match.group(1).replace(",", "").replace(".", ""))
                 if 400000 <= clean_g <= 850000:
                     gold_21_price = clean_g
             else:
-                # شێوازی دووەم: کاتێک بە وشەی "هەزار" دەنووسرێت (وەک 590 هەزار)
                 g_hazar = re.search(r'(?:عیار|عەیار|عەیاری|عیاری|زێڕ|زێر)\s*21[^\d]*(\d{3})\s*هەزار', msg)
                 if g_hazar:
                     clean_g = int(g_hazar.group(1)) * 1000
@@ -91,7 +92,6 @@ def extract_market_rates(messages):
     return usd_price, gold_21_price, silver_price
 
 def fetch_all_prices():
-    """پشکنینی هەموو کەناڵەکان بەدوای دۆلار، زێڕ و زێو"""
     best_usd = None
     best_gold = None
     best_silver = None
@@ -180,11 +180,12 @@ def send_dollar_update(new_price, old_price=None, gold_price=None, silver_price=
     except Exception as e:
         print(f"هەڵە لە پۆست: {e}", flush=True)
 
-def handle_daily_market_close(my_channel_messages, current_price, gold_price=None, silver_price=None):
+def handle_daily_market_close(my_channel_messages, current_price, today_date_str, gold_price=None, silver_price=None):
     try:
+        # ئەگەر بەرواری ئەمڕۆ لە پۆستەکانی داخراندا هەبێت، دووبارەی ناکاتەوە
         for msg in my_channel_messages[-8:]:
-            if "داخرانی بازاڕ" in msg:
-                print("پۆستی داخران پێشتر ئەمڕۆ کراوە.", flush=True)
+            if "داخرانی بازاڕ" in msg and today_date_str in msg:
+                print("پۆستی داخران پێشتر بۆ ئەمڕۆ کراوە.", flush=True)
                 return
 
         usd_prices = []
@@ -204,7 +205,7 @@ def handle_daily_market_close(my_channel_messages, current_price, gold_price=Non
         low_p = min(usd_prices)
 
         close_caption = (
-            "🔒 **داخرانی بازاڕ لە هەولێر**\n\n"
+            f"🔒 **داخرانی بازاڕ لە هەولێر** ({today_date_str})\n\n"
             f"🔹 **دۆلار: {current_price:,} دینار**\n"
             f"🔺 **بەرزترین: {high_p:,} دینار**\n"
             f"🔻 **نزمترین: {low_p:,} دینار**"
@@ -238,7 +239,7 @@ def handle_daily_market_close(my_channel_messages, current_price, gold_price=Non
             msg_id = r.json().get("result", {}).get("message_id")
             if msg_id:
                 add_reaction(msg_id, "🔒")
-        print("پۆستی داخران نێردرا.", flush=True)
+        print("پۆستی داخران بە سەرکەوتوویی نێردرا.", flush=True)
     except Exception as e:
         print(f"هەڵە لە پۆستی داخران: {e}", flush=True)
 
@@ -246,6 +247,7 @@ if __name__ == "__main__":
     kurd_time = datetime.now(timezone(timedelta(hours=3)))
     current_hour = kurd_time.hour
     current_minute = kurd_time.minute
+    today_str = kurd_time.strftime("%Y/%m/%d")
 
     usd_price, gold_price, silver_price = fetch_all_prices()
     my_msgs = get_channel_messages(CHANNEL_ID)
@@ -265,6 +267,6 @@ if __name__ == "__main__":
         is_closing_time = (current_hour == 18 and current_minute >= 50) or (current_hour == 19 and current_minute <= 20)
 
         if is_closing_time:
-            handle_daily_market_close(my_msgs, usd_price, gold_price, silver_price)
+            handle_daily_market_close(my_msgs, usd_price, today_str, gold_price, silver_price)
         elif usd_price != last_usd:
             send_dollar_update(usd_price, last_usd, gold_price, silver_price)
