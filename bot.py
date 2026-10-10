@@ -3,6 +3,7 @@ import requests
 import re
 import os
 import json
+import urllib.parse
 from bs4 import BeautifulSoup
 
 BOT_TOKEN = "8887386327:AAEArJPxnYVpYIQjMMJlt--JWkRu3u1unVQ"
@@ -43,7 +44,7 @@ def get_latest_price_from_channel(channel_username):
     return None
 
 def add_reaction(message_id, emoji):
-    """دانانی ئیمۆجی (Reaction) لەسەر پۆستەکە"""
+    """دانانی کاردانەوە (ئیمۆجی) لەسەر پۆستەکە"""
     try:
         react_url = f"https://api.telegram.org/bot{BOT_TOKEN}/setMessageReaction"
         payload = {
@@ -82,13 +83,17 @@ def send_dollar_update(new_price, old_price=None):
             "📍 @krddollar"
         )
 
-        # دیزاینی دوگمە شەفافەکان (Inline Keyboard)
-        share_text = "نوێترین%20نرخی%20دۆلار%20لە%20بازاڕی%20هەولێر"
+        # دەقی شەیرکردن بەبێ %20 و بە کورتی
+        raw_share_text = "📊 نوێترین نرخی دۆلار لە بازاڕی هەولێر 💵"
+        encoded_text = urllib.parse.quote(raw_share_text)
+        share_url = f"https://t.me/share/url?url=https://t.me/krddollar&text={encoded_text}"
+
+        # دوگمە کورتکراوەکان بۆ ئەوەی بە تەواوی لەسەر شاشەی مۆبایل دەربکەون
         buttons = {
             "inline_keyboard": [
                 [
-                    {"text": "📢 جۆینکردنی کەناڵ", "url": "https://t.me/krddollar"},
-                    {"text": "🔄 ناردن بۆ هاوڕێیان", "url": f"https://t.me/share/url?url=https://t.me/krddollar&text={share_text}"}
+                    {"text": "📢 جۆینکردن", "url": "https://t.me/krddollar"},
+                    {"text": "🔄 ناردن", "url": share_url}
                 ]
             ]
         }
@@ -117,7 +122,6 @@ def send_dollar_update(new_price, old_price=None):
 
         print(f"پۆست کرا: {new_price} | وەڵام: {r.status_code}", flush=True)
 
-        # ئەگەر پۆستەکە سەرکەوتوو بوو، ئیمۆجی دادەنێت
         if r and r.status_code == 200:
             msg_data = r.json()
             message_id = msg_data.get("result", {}).get("message_id")
