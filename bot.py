@@ -48,7 +48,6 @@ def extract_market_rates(messages):
     gold_21_price = None
     silver_price = None
 
-    # تەنها لە ١٢ پەیامی کۆتایی بگەڕێ تا نرخی ڕۆژانی پێشوو نەهێنێت
     recent_messages = list(reversed(messages))[:12]
 
     for msg in recent_messages:
@@ -75,7 +74,7 @@ def extract_market_rates(messages):
                     if 400000 <= clean_g <= 850000:
                         gold_21_price = clean_g
 
-        # ٣. دەرهێنانی نرخی زێو
+        # ٣. دەرهێنانی نرخی زیو
         if not silver_price:
             s_match = re.search(r'(?:زێو|زیو)[^\d]*(\d{1,2}[,.]?\d{3})', msg)
             if s_match:
@@ -106,7 +105,7 @@ def fetch_all_prices():
         if not best_silver and s:
             best_silver = s
 
-    print(f"ئەنجامی پشکنین: دۆلار={best_usd}, زێڕ={best_gold}, زێو={best_silver}", flush=True)
+    print(f"ئەنجامی پشکنین: دۆلار={best_usd}, زێڕ={best_gold}, زیو={best_silver}", flush=True)
     return best_usd, best_gold, best_silver
 
 def add_reaction(message_id, emoji):
@@ -146,7 +145,7 @@ def send_dollar_update(new_price, old_price=None, gold_price=None, silver_price=
         if gold_price:
             extra_rates += f"\n👑 **1 مسقاڵ زێڕ (عەیار 21): {gold_price:,} دینار**"
         if silver_price:
-            extra_rates += f"\n⚪️ **1 مسقاڵ زێو: {silver_price:,} دینار**"
+            extra_rates += f"\n⚪️ **1 مسقاڵ زیو: {silver_price:,} دینار**"
 
         caption = (
             "💵 **نرخی بازاڕ لە هەولێر**\n\n"
@@ -182,7 +181,6 @@ def send_dollar_update(new_price, old_price=None, gold_price=None, silver_price=
 
 def handle_daily_market_close(my_channel_messages, current_price, today_date_str, gold_price=None, silver_price=None):
     try:
-        # ئەگەر بەرواری ئەمڕۆ لە پۆستەکانی داخراندا هەبێت، دووبارەی ناکاتەوە
         for msg in my_channel_messages[-8:]:
             if "داخرانی بازاڕ" in msg and today_date_str in msg:
                 print("پۆستی داخران پێشتر بۆ ئەمڕۆ کراوە.", flush=True)
@@ -213,7 +211,7 @@ def handle_daily_market_close(my_channel_messages, current_price, today_date_str
         if gold_price:
             close_caption += f"\n👑 **زێڕ (عەیار 21): {gold_price:,} دینار**"
         if silver_price:
-            close_caption += f"\n⚪️ **زێو: {silver_price:,} دینار**"
+            close_caption += f"\n⚪️ **زیو: {silver_price:,} دینار**"
 
         close_caption += "\n\n📍 @krddollar"
 
