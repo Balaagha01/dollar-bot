@@ -1,15 +1,16 @@
-name: Telegram Dollar Bot
+name: Check Dollar Price
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
-  workflow_dispatch:
+    # هەر 10 خولەک جارێک لە نێوان 06:00 تا 16:00 بە UTC (کاتی کراوەیی بازاڕ)
+    - cron: '*/10 6-16 * * *'
+  workflow_dispatch: # بۆ ئەوەی هەر کات ویستت بە دەستیش Run بکەیت
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -17,10 +18,12 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install requirements
+      - name: Install Dependencies
         run: |
-          pip install -r requirements.txt
+          pip install requests beautifulsoup4
 
-      - name: Run script
+      - name: Run Dollar Bot
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
           python bot.py
