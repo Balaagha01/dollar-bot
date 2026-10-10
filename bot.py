@@ -31,50 +31,32 @@ def get_live_rate():
                     if 140000 <= clean <= 190000:
                         return clean
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error: {e}", flush=True)
     return None
 
-def send_dollar_update(new_price, old_price):
+def send_dollar_update(price):
     try:
-        status_text = ""
-        if old_price is not None:
-            if new_price > old_price:
-                status_text = f"\n**📈 بەرزبوونەوە ({new_price - old_price:,} دینار)**"
-            elif new_price < old_price:
-                status_text = f"\n**📉 دابەزین ({old_price - new_price:,} دینار)**"
-
         message = (
-            "**💵 نرخی دۆلار**\n\n"
-            f"**🔹 هەولێر: {new_price:,} دینار**{status_text}\n\n"
-            "**📍 @krddollar**"
+            "💵 **نرخی دۆلار لە بازاڕی هەولێر**\n\n"
+            f"🔹 **100 دۆلار = {price:,} دینار**\n\n"
+            "📍 @krddollar"
         )
-
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         payload = {
             "chat_id": CHANNEL_ID,
             "text": message,
             "parse_mode": "Markdown"
         }
-        requests.post(url, data=payload, timeout=10)
-        print(f"پۆست کرا: {new_price}")
+        r = requests.post(url, data=payload, timeout=10)
+        print(f"پۆست کرا: {price} | وەڵامی تێلیگرام: {r.status_code}", flush=True)
     except Exception as e:
-        print(f"Error sending message: {e}")
+        print(f"Error sending message: {e}", flush=True)
 
 if __name__ == "__main__":
-    print("بۆتەکە کەوتە کار...")
-    last_price = None
-    while last_price is None:
-        last_price = get_live_rate()
-        if last_price is None:
-            time.sleep(5)
-
-    print(f"نرخی ئێستا: {last_price}")
-    while True:
-        try:
-            time.sleep(30)
-            price = get_live_rate()
-            if price and price != last_price:
-                send_dollar_update(price, last_price)
-                last_price = price
-        except Exception:
-            time.sleep(10)
+    print("بۆتەکە دەستی پێکرد...", flush=True)
+    price = get_live_rate()
+    if price:
+        print(f"نرخ دۆزرایەوە: {price}", flush=True)
+        send_dollar_update(price)
+    else:
+        print("هیچ نرخێک نەدۆزرایەوە!", flush=True)
