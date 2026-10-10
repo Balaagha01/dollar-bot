@@ -41,19 +41,39 @@ def get_latest_price_from_channel(channel_username):
         print(f"هەڵە لە وەرگرتنی نرخ: {e}", flush=True)
     return None
 
+def add_reaction(message_id, emoji):
+    """دانانی کاردانەوە (ئیمۆجی) لەسەر پۆستەکە"""
+    try:
+        react_url = f"https://api.telegram.org/bot{BOT_TOKEN}/setMessageReaction"
+        payload = {
+            "chat_id": CHANNEL_ID,
+            "message_id": message_id,
+            "reaction": [{"type": "emoji", "emoji": emoji}]
+        }
+        res = requests.post(react_url, json=payload, timeout=10)
+        if res.status_code == 200:
+            print(f"ئیمۆجیی {emoji} لەسەر پۆستەکە دانرا.", flush=True)
+        else:
+            print(f"نەتوانرا ئیمۆجی دابنرێت: {res.text}", flush=True)
+    except Exception as e:
+        print(f"هەڵە لە دانانی ئیمۆجی: {e}", flush=True)
+
 def send_dollar_update(new_price, old_price=None):
     try:
         status_line = ""
-        selected_image = IMAGE_UP  # بە شێوەی سەرەتایی
+        selected_image = IMAGE_UP
+        reaction_emoji = "👍"  # بنەڕەتی
 
         if old_price:
             diff = abs(new_price - old_price)
             if new_price > old_price:
                 status_line = f"\n📈 **بەرزبوونەوە (+{diff:,} دینار)**"
                 selected_image = IMAGE_UP
+                reaction_emoji = "👍"
             elif new_price < old_price:
                 status_line = f"\n📉 **دابەزین (-{diff:,} دینار)**"
                 selected_image = IMAGE_DOWN
+                reaction_emoji = "👎"
 
         caption = (
             "💵 **نرخی دۆلار لە بازاڕی هەولێر**\n\n"
@@ -61,7 +81,7 @@ def send_dollar_update(new_price, old_price=None):
             "📍 @krddollar"
         )
 
-        # پشکنین بۆ بوونی وێنەکە
+        r = None
         if os.path.exists(selected_image):
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
             with open(selected_image, "rb") as f:
@@ -73,11 +93,18 @@ def send_dollar_update(new_price, old_price=None):
                 files = {"photo": f}
                 r = requests.post(url, data=payload, files=files, timeout=20)
         else:
-            # ئەگەر فایلی وێنەکە بەردەست نەبوو تەنها تێکست دەنێرێت
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
             r = requests.post(url, data={"chat_id": CHANNEL_ID, "text": caption, "parse_mode": "Markdown"}, timeout=10)
 
-        print(f"پۆست کرا: {new_price} بە وێنەی {selected_image} | دۆخ: {r.status_code}", flush=True)
+        print(f"پۆست کرا: {new_price} | وەڵام: {r.status_code}", flush=True)
+
+        # وەرگرتنی ئایدی پەیامەکە و دانانی کاردانەوە
+        if r and r.status_code == 200:
+            msg_data = r.json()
+            message_id = msg_data.get("result", {}).get("message_id")
+            if message_id:
+                add_reaction(message_id, reaction_emoji)
+
     except Exception as e:
         print(f"هەڵە لە ناردنی پۆست: {e}", flush=True)
 
