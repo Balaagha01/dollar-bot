@@ -224,63 +224,6 @@ def handle_daily_market_close(my_channel_messages, current_price, gold_price=Non
     except Exception as e:
         print(f"هەڵە لە داخران: {e}", flush=True)
 
-def handle_calculator_messages(market_rate):
-    """حاسیبەی ژمێریاری لە چاتی تایبەت"""
-    try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
-        res = requests.get(url, timeout=10)
-        if res.status_code != 200:
-            return
-        
-        updates = res.json().get("result", [])
-        if not updates:
-            return
-
-        for u in updates:
-            msg = u.get("message")
-            if not msg or "text" not in msg:
-                continue
-            
-            chat_id = msg["chat"]["id"]
-            user_text = convert_digits(msg["text"].strip())
-
-            if user_text.startswith("/start"):
-                reply = (
-                    "👋 **بەخێربێیت بۆ حاسیبەی دراو!**\n\n"
-                    "💵 بڕی دۆلار بنووسە (بۆ نموونە: `100` یان `500$`)\n"
-                    "یان بڕی دینار بنووسە تا ڕاستەوخۆ بۆت بگۆڕمەوە.\n\n"
-                    f"🔹 نرخی ئێستای بازاڕ: **{market_rate:,} دینار**"
-                )
-            else:
-                clean_num_str = re.sub(r'[\$,\s]', '', user_text)
-                try:
-                    amount = float(clean_num_str)
-                    if amount < 50000:
-                        total_iqd = (amount / 100.0) * market_rate
-                        reply = (
-                            f"💵 **{amount:,.0f} دۆلار**\n"
-                            f"🟰 **{total_iqd:,.0f} دیناری عێراقی**\n\n"
-                            f"📊 بەپێی 100$ = {market_rate:,} د.ع"
-                        )
-                    else:
-                        total_usd = (amount / market_rate) * 100.0
-                        reply = (
-                            f"🇮🇶 **{amount:,.0f} دینار**\n"
-                            f"🟰 **{total_usd:,.2f} دۆلاری ئەمریکی**\n\n"
-                            f"📊 بەپێی 100$ = {market_rate:,} د.ع"
-                        )
-                except ValueError:
-                    reply = "تکایە ژمارەکە بە ڕوونی بنووسە (بۆ نموونە: `200` یان `350000`)."
-
-            send_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-            requests.post(send_url, json={"chat_id": chat_id, "text": reply, "parse_mode": "Markdown"}, timeout=10)
-
-        last_id = updates[-1]["update_id"]
-        requests.get(f"{url}?offset={last_id + 1}", timeout=10)
-
-    except Exception as e:
-        print(f"هەڵە لە حاسیبە: {e}", flush=True)
-
 if __name__ == "__main__":
     kurd_time = datetime.now(timezone(timedelta(hours=3)))
     current_hour = kurd_time.hour
@@ -301,12 +244,13 @@ if __name__ == "__main__":
             break
 
     if usd_price:
-        # ١. وەڵامدانەوەی نامەکانی حاسیبە لە چاتی تایبەت
-        handle_calculator_messages(usd_price)
-
-        # ٢. پۆستی ئاسایی لە کاتی گۆڕانی نرخ
+        # ١. پۆستی ئاسایی لە کاتی گۆڕانی نرخ
         if usd_price != last_usd:
             send_dollar_update(usd_price, last_usd, gold_price, silver_price)
+
+        # ٢. کورتەی داخرانی ئێواران (نێوان 06:50 تا 07:20)
+        if (current_hour == 18 and current_minute >= 50) or (current_hour == 19 and current_minute <= 20):
+            handle_daily_market_close(my_msgs, usd_price, gold_price, silver_price)
 
         # ٣. کورتەی داخرانی ئێواران (نێوان 06:50 تا 07:20)
         if (current_hour == 18 and current_minute >= 50) or (current_hour == 19 and current_minute <= 20):
