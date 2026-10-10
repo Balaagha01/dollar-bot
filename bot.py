@@ -12,9 +12,11 @@ CHANNEL_ID = "@krddollar"
 
 SOURCE_CHANNELS = ["bazari_dolaraka", "dolar_hawler", "hawler_dolar"]
 
+# فایلەکانی وێنە
 IMAGE_UP = "up.jpg"
 IMAGE_DOWN = "down.jpg"
 IMAGE_CLOSE = "close.jpg"
+IMAGE_ALL = "all.jpg"
 
 FLASH_ALERT_LIMIT = 1000
 
@@ -141,6 +143,10 @@ def send_dollar_update(new_price, old_price=None, gold_price=None, silver_price=
                 selected_image = IMAGE_DOWN
                 reaction_emoji = "👎"
 
+        # ئەگەر زێڕ یان زیو هەبوو، وێنەی all.jpg هەڵدەبژێردرێت
+        if (gold_price or silver_price) and os.path.exists(IMAGE_ALL):
+            selected_image = IMAGE_ALL
+
         extra_rates = ""
         if gold_price:
             extra_rates += f"\n👑 **1 مسقاڵ زێڕ (عەیار 21): {gold_price:,} دینار**"
@@ -181,6 +187,7 @@ def send_dollar_update(new_price, old_price=None, gold_price=None, silver_price=
 
 def handle_daily_market_close(my_channel_messages, current_price, today_date_str, gold_price=None, silver_price=None):
     try:
+        # ڕێگری لە دووبارەبوونەوە بە پشکنینی بەرواری ئەمڕۆ
         for msg in my_channel_messages[-8:]:
             if "داخرانی بازاڕ" in msg and today_date_str in msg:
                 print("پۆستی داخران پێشتر بۆ ئەمڕۆ کراوە.", flush=True)
