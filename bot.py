@@ -6,7 +6,10 @@ from bs4 import BeautifulSoup
 
 BOT_TOKEN = "8887386327:AAEArJPxnYVpYIQjMMJlt--JWkRu3u1unVQ"
 CHANNEL_ID = "@krddollar"
-GIF_FILE = "dollar.gif"
+
+# ناوی فایلی وێنەکان
+IMAGE_UP = "up.jpg"
+IMAGE_DOWN = "down.jpg"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -41,12 +44,16 @@ def get_latest_price_from_channel(channel_username):
 def send_dollar_update(new_price, old_price=None):
     try:
         status_line = ""
+        selected_image = IMAGE_UP  # بە شێوەی سەرەتایی
+
         if old_price:
             diff = abs(new_price - old_price)
             if new_price > old_price:
                 status_line = f"\n📈 **بەرزبوونەوە (+{diff:,} دینار)**"
+                selected_image = IMAGE_UP
             elif new_price < old_price:
                 status_line = f"\n📉 **دابەزین (-{diff:,} دینار)**"
+                selected_image = IMAGE_DOWN
 
         caption = (
             "💵 **نرخی دۆلار لە بازاڕی هەولێر**\n\n"
@@ -54,25 +61,25 @@ def send_dollar_update(new_price, old_price=None):
             "📍 @krddollar"
         )
 
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendAnimation"
-        
-        if os.path.exists(GIF_FILE):
-            with open(GIF_FILE, "rb") as f:
+        # پشکنین بۆ بوونی وێنەکە
+        if os.path.exists(selected_image):
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+            with open(selected_image, "rb") as f:
                 payload = {
                     "chat_id": CHANNEL_ID,
                     "caption": caption,
                     "parse_mode": "Markdown"
                 }
-                files = {"animation": f}
+                files = {"photo": f}
                 r = requests.post(url, data=payload, files=files, timeout=20)
         else:
-            # ئەگەر فایلەکە بەردەست نەبوو وەک دەقی ئاسایی بینێرێت
-            msg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-            r = requests.post(msg_url, data={"chat_id": CHANNEL_ID, "text": caption, "parse_mode": "Markdown"}, timeout=10)
+            # ئەگەر فایلی وێنەکە بەردەست نەبوو تەنها تێکست دەنێرێت
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+            r = requests.post(url, data={"chat_id": CHANNEL_ID, "text": caption, "parse_mode": "Markdown"}, timeout=10)
 
-        print(f"پۆست کرا: {new_price} | ئەنجام: {r.status_code}", flush=True)
+        print(f"پۆست کرا: {new_price} بە وێنەی {selected_image} | دۆخ: {r.status_code}", flush=True)
     except Exception as e:
-        print(f"هەڵە لە ناردن: {e}", flush=True)
+        print(f"هەڵە لە ناردنی پۆست: {e}", flush=True)
 
 if __name__ == "__main__":
     print("پشکنینی نرخ دەستی پێکرد...", flush=True)
