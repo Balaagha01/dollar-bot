@@ -1,30 +1,27 @@
 name: Check Dollar Price
 
 on:
-  schedule:
-    # هەر 10 خولەک جارێک لە نێوان 06:00 تا 16:30 بە کاتی جیهانی UTC
-    # (کە دەکاتە 09:00ی بەیانی تا 07:30ی ئێوارە بە کاتی کوردستان)
-    - cron: '*/10 6-16 * * *'
   workflow_dispatch:
+  schedule:
+    # هەموو 10 خولەک جارێک لە نێوان 10:00ی بەیانی تا 08:00ی ئێوارە (بەکاتی هەولێر)
+    - cron: '*/10 7-17 * * *'
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
-          pip install requests beautifulsoup4
+          pip install requests beautifulsoup4 pillow
 
-      - name: Run Dollar Bot
-        env:
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      - name: Run script
         run: |
           python bot.py
