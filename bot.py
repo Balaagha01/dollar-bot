@@ -2,22 +2,28 @@ import os
 import re
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, timezone, timedelta
 
 # ==================== ڕێکخستنە سەرەکییەکان ====================
-# تۆکنە نوێیەکەی BotFather لێرە دابنێ:
+# تۆکنە نوێیەکەت کە لە BotFather وەرتگرتووە لێرە دابنێ:
 BOT_TOKEN = "8887386327:AAHRlklAMGcR8D7MRngaIyYr_99UhlW2dwA"
 
-# کەناڵەکەت:
+# ئایدی کەناڵەکەت:
 CHANNEL_ID = "@krddollar"
 
-# کەناڵە سەرچاوەکان:
-SOURCE_CHANNELS = ["bazari_dolaraka", "dolar_hawler", "hawler_dolar"]
+# کەناڵە سەرچاوەکان (کەناڵی زێڕی کوردستانیشی بۆ زیادکراوە):
+SOURCE_CHANNELS = ["BorsayKurdistan", "bazari_dolaraka", "dolar_hawler", "hawler_dolar"]
 
-# ==================== فەنکشنەکانی دەرهێنانی نرخ ====================
+# ==================== ڕێکخستنی ژمارە و دەق ====================
 
-def get_channel_messages(channel_username, limit=10):
-    """وەرگرتنی دوایین پۆستەکانی کەناڵێک لە وێبەوە"""
+def normalize_digits(text):
+    """گۆڕینی هەموو ژمارە کوردی و عەرەبییەکان بۆ ئینگلیزی"""
+    kurdish_digits = "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹"
+    latin_digits = "01234567890123456789"
+    trans = str.maketrans(kurdish_digits, latin_digits)
+    return text.translate(trans)
+
+def get_channel_messages(channel_username, limit=12):
+    """خوێندنەوەی دوایین پۆستەکانی کەناڵەکە لە وێبەوە"""
     url = f"https://t.me/s/{channel_username.replace('@', '')}"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -27,52 +33,74 @@ def get_channel_messages(channel_username, limit=10):
         if res.status_code == 200:
             soup = BeautifulSoup(res.text, "html.parser")
             msgs = soup.find_all("div", class_="tgme_widget_message_text")
-            return [m.get_text(separator="\n").strip() for m in msgs[-limit:]]
+            return [normalize_digits(m.get_text(separator="\n").strip()) for m in msgs[-limit:]]
     except Exception as e:
         print(f"هەڵە لە سەرچاوەی {channel_username}: {e}", flush=True)
     return []
+
+# ==================== فەنکشنەکانی دەرهێنانی نرخ ====================
 
 def extract_usd(text):
     """دەرهێنانی نرخی 100 دۆلار"""
     matches = re.findall(r'(\d{2,3}[,.]?\d{3})', text)
     for m in matches:
-        clean = int(m.replace(",", "").replace(".", ""))
+        clean = int(re.sub(r'[,.\s]', '', m))
         if 140000 <= clean <= 175000:
             return clean
     return None
 
 def extract_gold(text):
-    """دەرهێنانی نرخی مسقاڵی زێڕ"""
+    """دەرهێنانی نرخی مسقاڵی زێڕی عەیار 21"""
+    # 1. گەڕان بەدوای عەیار 21 ڕاستەوخۆ (بۆ نموونە: عەیار 21=937,000 یان 937 هەزار)
+    match_21 = re.search(r'(?:عەیار\s*21|عیار\s*21|ع21)[^\d\n]*(\d{1,4}[,.]?\d{3}|\d{3})', text)
+    if match_21:
+        val = int(re.sub(r'[,.\s]', '', match_21.group(1)))
+        if val < 2000:  # ئەگەر نووسرابوو 937 (واتە 937 هەزار)
+            val *= 1000
+        if 400000 <= val <= 1300000:
+            return f"{val:,}"
+
+    # 2. گەڕان لە دێڕەکانی زێڕ بەدوای فۆرماتی 937,000 یان 937 هەزار
     lines = text.split("\n")
     for line in lines:
-        if any(w in line for w in ["زێڕ", "مسقاڵ", "عەیار 21", "عیار 21"]):
-            matches = re.findall(r'(\d{2,3}[,.]?\d{3})', line)
-            for m in matches:
-                clean = int(m.replace(",", "").replace(".", ""))
-                if 400000 <= clean <= 850000:
+        if any(w in line for w in ["زێڕ", "مسقاڵ"]):
+            # گەڕان بەدوای ژمارەی تەواو
+            for m in re.findall(r'(\d{1,4}[,.]?\d{3})', line):
+                clean = int(re.sub(r'[,.\s]', '', m))
+                if 400000 <= clean <= 1300000:
                     return f"{clean:,}"
+            # گەڕان بەدوای فۆرماتی (937 هەزار)
+            m_haz = re.search(r'(\d{3})\s*هەزار', line)
+            if m_haz:
+                v = int(m_haz.group(1)) * 1000
+                if 400000 <= v <= 1300000:
+                    return f"{v:,}"
     return None
 
 def extract_silver(text):
-    """دەرهێنانی نرخی زیو"""
+    """دەرهێنانی نرخی مسقاڵی زیو"""
     lines = text.split("\n")
     for line in lines:
         if "زیو" in line:
-            matches = re.findall(r'(\d{1,3}[,.]?\d{3})', line)
-            for m in matches:
-                clean = int(m.replace(",", "").replace(".", ""))
-                if 5000 <= clean <= 60000:
+            for m in re.findall(r'(\d{1,2}[,.]?\d{3})', line):
+                clean = int(re.sub(r'[,.\s]', '', m))
+                if 4000 <= clean <= 60000:
                     return f"{clean:,}"
+            m_haz = re.search(r'(\d{1,2})\s*هەزار', line)
+            if m_haz:
+                v = int(m_haz.group(1)) * 1000
+                if 4000 <= v <= 60000:
+                    return f"{v:,}"
     return None
 
 def fetch_all_prices():
-    """گەڕان لە سەرچاوەکان بەدوای دۆلار، زێڕ، زیو"""
+    """پشکنینی هەموو کەناڵەکان بەدوای دۆلار، زێڕ، زیو"""
     latest_usd = None
     latest_gold = None
     latest_silver = None
 
     for channel in SOURCE_CHANNELS:
-        messages = get_channel_messages(channel, limit=8)
+        messages = get_channel_messages(channel, limit=10)
         for msg in reversed(messages):
             if not latest_usd:
                 latest_usd = extract_usd(msg)
@@ -83,12 +111,10 @@ def fetch_all_prices():
 
             if latest_usd and latest_gold and latest_silver:
                 break
-        if latest_usd:
-            break
 
     return latest_usd, latest_gold, latest_silver
 
-# ==================== ناردنی وێنە و پۆست ====================
+# ==================== ناردنی پۆست ====================
 
 def send_telegram_photo(caption, image_filename):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
@@ -118,12 +144,12 @@ def send_dollar_update(usd, last_usd, gold, silver):
         trend_text = "🔹 جێگیر"
         default_img = "up.jpg"
 
-    # داڕشتنی دەق بەبێ بەروار و کاتژمێر
+    # دەقی پۆستەکە بەبێ بەروار و کاتژمێر
     caption = "💵 نرخی بازاڕ لە هەولێر\n\n"
     caption += f"🔹 100 دۆلار = {usd:,} دینار\n"
     caption += f"{trend_text}\n"
 
-    # زیادکردنی زێڕ و زیو ئەگەر هەبن
+    # ئەگەر زێڕ یان زیو هەبێت دەینوسێت
     if gold or silver:
         caption += "\n"
         if gold:
@@ -137,14 +163,13 @@ def send_dollar_update(usd, last_usd, gold, silver):
     chosen_img = "all.jpg" if (gold or silver) else default_img
 
     send_telegram_photo(caption, chosen_img)
-    print(f"پۆست کرا: {chosen_img}", flush=True)
+    print(f"پۆست کرا بە وێنەی {chosen_img}: دۆلار={usd}, زێڕ={gold}, زیو={silver}", flush=True)
 
 # ==================== کارکردنی سەرەکی ====================
 
 if __name__ == "__main__":
     usd_price, gold_price, silver_price = fetch_all_prices()
     
-    # دۆزینەوەی کۆتا نرخی کەناڵەکەت بۆ بەراوردکردن
     my_msgs = get_channel_messages(CHANNEL_ID)
     last_usd = None
     for msg in reversed(my_msgs):
