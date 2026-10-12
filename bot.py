@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 
 # ==================== ڕێکخستنە سەرەکییەکان ====================
 # تۆکنە نوێیەکەی کە لە BotFather وەرتگرت لێرە لە نێوان جووت کەوانەکەدا دابنێ:
-BOT_TOKEN = "YOUR_NEW_BOT_TOKEN_HERE"
+BOT_TOKEN = "8887386327:AAHRlklAMGcR8D7MRngaIyYr_99UhlW2dwA"
 
 # ئایدی کەناڵەکەت:
 CHANNEL_ID = "@krddollar"
