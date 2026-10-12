@@ -7,7 +7,7 @@ import urllib.parse
 from datetime import datetime, timezone, timedelta
 from bs4 import BeautifulSoup
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8887386327:AAEArJPxnYVpYIQjMMJlt--JWkRu3u1unVQ")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8887386327:AAHRlklAMGcR8D7MRngaIyYr_99UhlW2dwA")
 CHANNEL_ID = "@krddollar"
 
 SOURCE_CHANNELS = ["bazari_dolaraka", "dolar_hawler", "hawler_dolar"]
